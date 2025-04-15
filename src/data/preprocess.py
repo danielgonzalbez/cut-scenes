@@ -1,16 +1,18 @@
-import config
 import os
 from tqdm import tqdm
 import json
 import torchaudio
+import torch
+import numpy as np
+
+import config
+from feature_extractor import FeatureExtractor
 
 folders = [
     subf for subf in os.listdir(config.folder)
     if os.path.isdir(os.path.join(config.folder, subf))
 ]
 
-
-lengths_wavs = {} # we save the length of each audio in case we need it later
 
 def generate_overlapping_samples(targets_wav:str, input_window:int = config.input_window, 
                                  sliding_hop:int = config.sliding_hop, name:str = None) -> list[dict]:
@@ -42,7 +44,23 @@ def generate_overlapping_samples(targets_wav:str, input_window:int = config.inpu
     return windows
 
 
-def clean_samples(sample: dict, special_cases: dict):
+
+def split_train_test_eval_data(data: list[dict], eval_split: tuple, test_folders: list[str], lengths_wavs: dict):
+    test_data = [d for d in data if d['source'].strip() in test_folders]
+
+    eval_data = [d for d in data if d['end'] < 0.7 * lengths_wavs[d['source']] 
+                 and d['start'] > 0.5* lengths_wavs[d['source']] 
+                 and d['source'].strip() not in test_folders]
+
+    train_data = [d for i,d in enumerate(data) if 
+                  (d['end'] < 0.5 * lengths_wavs[d['source']] or d['start'] > 0.7*lengths_wavs[d['source']]) 
+                and d['source'].strip() not in test_folders]
+
+    return train_data, eval_data, test_data
+
+
+
+def clean_samples(sample: dict, special_cases: dict, lengths_wavs: dict):
     name = sample['source']
 
     if sample['start'] < config.start_sample or sample['end'] > lengths_wavs[name] - config.end_sample:
@@ -53,16 +71,50 @@ def clean_samples(sample: dict, special_cases: dict):
             return False
         if 'start' in special_cases[name] and sample['start'] < special_cases[name]['start']:
             return False
-        
     return True
 
 
+def compute_mels(feature_extractor: FeatureExtractor, data:list[dict]):
+    """Extracts mels from each sample and returns the mean and std deviation for later use"""
+    means = []
+    stds = []
+    # extract mel from each sample
+    for subfolder in tqdm(folders):
+        files = os.listdir(os.path.join(config.folder, subfolder))
+        wav_file = [f for f in files if f.endswith('.wav')][0]
+        re_wav, _ = torchaudio.load(os.path.join(config.folder,subfolder,wav_file), normalize=True)
+        i_subfolder = [i for i, d in enumerate(data) if d['source'].strip()==subfolder] 
+        for i in i_subfolder:
+            sample = data[i]
+            wav_left = re_wav[0]
+            wav_left = wav_left.squeeze()[round(sample['start']):round(sample['end']-1)]
+            wav_right = re_wav[1]
+            wav_right = wav_right.squeeze()[round(sample['start']):round(sample['end']-1)]
+            wav = (wav_left + wav_right)/2
+            wav = wav - wav.mean() # DC offset
+            mel = feature_extractor(wav)
+            assert(mel.shape[-1]==config.num_frames)
+            data[i]['mel'] = mel.to(torch.bfloat16)
+            means.append(mel.mean().item())
+            stds.append(mel.std().item())
+            del mel
 
-def generate_dataset():
+    return data, np.mean(means), np.mean(stds)
+
+
+
+def generate_data(eval_split: tuple=config.eval_split, 
+                  test_folders: list[str]=config.test_folders,
+                  precompute_mels: bool=config.precompute_mels):
     """
     Generates the samples of train, eval and test sets and filters noisy samples.
-    Returns a list of dictionaries.
+    Args:
+        - eval_split: tuple indicating the start and end of the audio segments corresponding to the eval split.
+        - test_folders: list of video ids of the test split
+    Returns: 
+        - 3 lists of dictionaries (train, eval and test).
     """
+    lengths_wavs = {} # we save the length of each audio in case we need it later
     for subfolder in tqdm(folders):
         files = os.listdir(os.path.join(config.folder, subfolder))
         wav_file = [f for f in files if f.endswith('.wav')][0]
@@ -79,9 +131,25 @@ def generate_dataset():
     # handle special cases 
     with open(config.special_cases_file) as f:
         special_cases = json.load(f)
-    data = [d for d in data if clean_samples(d, special_cases)]
+    data = [d for d in data if clean_samples(d, special_cases, lengths_wavs)]
 
-    return data
+    # split sets
+    train_data, eval_data, test_data = split_train_test_eval_data(data, eval_split, test_folders, lengths_wavs)
+
+    print(f"Generated {len(train_data)} train samples, {len(eval_data)} eval samples and {len(test_data)} test samples")
+
+    # add mel specs to improve data loading efficiency
+    if precompute_mels:
+        feature_extractor = FeatureExtractor(normalize_input=False)
+        train_data, mean_train, std_train = compute_mels(feature_extractor=feature_extractor, data=train_data)
+        eval_data, _, _ = compute_mels(feature_extractor=feature_extractor, data=eval_data)
+        test_data, _, _ = compute_mels(feature_extractor=feature_extractor, data=test_data)
+    
+    return train_data, eval_data, test_data, (mean_train, std_train)
+
+
+
+
 
 
 
