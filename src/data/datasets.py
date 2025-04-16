@@ -1,10 +1,13 @@
 from torch.utils.data import Dataset
 import torch
 import torchaudio
+import numpy as np
+
 import config
 
+
 class AudioDataset(Dataset):
-    def __init__(self, data, feature_extractor, normalize=True, dtype=torch.float32,
+    def __init__(self, data, feature_extractor=None, normalize=True, dtype=torch.float32,
                  mean=None, std=None, tmask=None, fmask=None, noise=False):
         self.data = data
         self.feature_extractor=feature_extractor # not needed (just in case we want to compute the mel spec during training)
@@ -41,7 +44,7 @@ class AudioDataset(Dataset):
         target = torch.tensor(item['label'], dtype=self.dtype)
         if not self.normalize:
           # predict samples
-          target *= input_window
+          target *= config.input_window
         if target > 1:
             target = torch.tensor(-1, dtype=self.dtype)
 
