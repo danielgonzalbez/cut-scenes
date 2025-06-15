@@ -264,15 +264,6 @@ def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test
 # model and weights initialization
 cnn_config = CNNConfig()
 
-base = BasicCNN(last_dim=cnn_config.last_dim,
-               channels= list(cnn_config.channels),
-               dims=list(cnn_config.dims),
-               dropout=cnn_config.dropout,
-               input_H=cnn_config.input_H,
-               input_W = cnn_config.input_W,
-                        dims_model = cnn_config.dims_model
-               )
-
 model_config = ModelConfig()
 
 assert(model_config.inner_dim == cnn_config.channels[-1])
