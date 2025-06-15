@@ -95,11 +95,3 @@ class ConvBlock(nn.Module):
         x = self.activation(self.norm(x))
         return self.dropout(x)
     
-
-def get_sinusoidal_pos_encoding(seq_len, dim):
-    pe = torch.zeros(seq_len, dim)
-    position = torch.arange(0, seq_len, dtype=torch.float).unsqueeze(1)
-    div_term = torch.exp(torch.arange(0, dim, 2).float() * (-math.log(10000.0) / dim))
-    pe[:, 0::2] = torch.sin(position * div_term)
-    pe[:, 1::2] = torch.cos(position * div_term)
-    return pe  # shape: [seq_len, dim]
