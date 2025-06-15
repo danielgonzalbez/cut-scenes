@@ -48,12 +48,12 @@ def generate_overlapping_samples(targets_wav:str, input_window:int = config.inpu
 def split_train_test_eval_data(data: list[dict], eval_split: tuple, test_folders: list[str], lengths_wavs: dict):
     test_data = [d for d in data if d['source'].strip() in test_folders]
 
-    eval_data = [d for d in data if d['end'] < 0.7 * lengths_wavs[d['source']] 
+    eval_data = [d for d in data if d['end'] < 0.65 * lengths_wavs[d['source']] 
                  and d['start'] > 0.5* lengths_wavs[d['source']] 
                  and d['source'].strip() not in test_folders]
 
     train_data = [d for i,d in enumerate(data) if 
-                  (d['end'] < 0.5 * lengths_wavs[d['source']] or d['start'] > 0.7*lengths_wavs[d['source']]) 
+                  (d['end'] < 0.5 * lengths_wavs[d['source']] or d['start'] > 0.65*lengths_wavs[d['source']]) 
                 and d['source'].strip() not in test_folders]
 
     return train_data, eval_data, test_data
@@ -132,6 +132,13 @@ def generate_data(eval_split: tuple=config.eval_split,
     with open(config.special_cases_file) as f:
         special_cases = json.load(f)
     data = [d for d in data if clean_samples(d, special_cases, lengths_wavs)]
+
+    # clen samples
+    data = [d for d in data if d['empty_samples']+ d['label']*config.input_window < 16000*50]
+    data = [d for d in data if d['label']*config.input_window > 4.2*16000 or d['label']*config.input_window < 3.8*16000]
+    data = [d for d in data if d['start'] > 150*16000 and d['end'] < lengths_wavs[d['source'].strip()] - 350*16000]
+    data = [d for d in data if d['label'] * config.input_window > 0.2*16000]
+    data = [d for d in data if d['empty_samples'] > 0.2*16000]
 
     # split sets
     train_data, eval_data, test_data = split_train_test_eval_data(data, eval_split, test_folders, lengths_wavs)

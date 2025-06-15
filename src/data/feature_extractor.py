@@ -24,7 +24,7 @@ class FeatureExtractor():
     def __call__(self, audio):
         mel = self.transforms_mel(audio).to(self.dtype)
         # normalization following: https://github.com/YuanGongND/ast/blob/102f0477099f83e04f6f2b30a498464b78bbaf46/src/dataloader.py#L191
-        mel = torch.log(mel+1e-10)
+        mel = torch.log(torch.clamp(mel,1e-10))
         if self.normalize_input:
             assert(self.mean and self.std)
             return self.normalize(mel, self.mean, self.std)

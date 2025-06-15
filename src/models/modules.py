@@ -1,4 +1,6 @@
 import torch.nn as nn
+import torch
+import math
 
 
 class SwiGLU(nn.Module):
@@ -9,15 +11,17 @@ class SwiGLU(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        swish_x = x * self.sigmoid(self.linear1(x))
-        return swish_x * self.linear2(x)
+        x1 = self.linear1(x)  
+        x2 = self.linear2(x)  
+        swish_x1 = x1 * self.sigmoid(x1)  
+        return swish_x1 * x2 
 
 
 
 class FeedForward(nn.Module):
   def __init__(self, in_dim:int, mid_dim:int, activation: nn.Module):
     super().__init__()
-    self.norm = nn.LayerNorm(in_dim)
+    self.norm = nn.RMSNorm(in_dim)
     self.linear1 = nn.Linear(in_dim, mid_dim)
     self.linear2 = nn.Linear(mid_dim, in_dim)
     self.act = activation
@@ -65,7 +69,6 @@ class MultiHeadAttention(nn.Module):
         weighted_vals = (v.transpose(-1,-2) @ weights).reshape(B, L, self.hidden_dim)
 
         # output projection: B x L x hidden_dim -> B x L x in_dim
-
         return self.out(weighted_vals)
     
 
@@ -91,3 +94,12 @@ class ConvBlock(nn.Module):
         x = self.linear(self.conv(x))
         x = self.activation(self.norm(x))
         return self.dropout(x)
+    
+
+def get_sinusoidal_pos_encoding(seq_len, dim):
+    pe = torch.zeros(seq_len, dim)
+    position = torch.arange(0, seq_len, dtype=torch.float).unsqueeze(1)
+    div_term = torch.exp(torch.arange(0, dim, 2).float() * (-math.log(10000.0) / dim))
+    pe[:, 0::2] = torch.sin(position * div_term)
+    pe[:, 1::2] = torch.cos(position * div_term)
+    return pe  # shape: [seq_len, dim]
