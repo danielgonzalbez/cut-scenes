@@ -30,7 +30,6 @@ class BasicCNN(nn.Module):
 
         self.final_ff = FeedForward(in_dim=dims[-1], mid_dim=dims[-1]*2, activation=SwiGLU(dims[-1]*2))
 
-
     def forward(self, x):
         # x: spectrogram. Shape: B x 128 x 400
         # returns tensor of shape: B x last_dim
@@ -74,6 +73,7 @@ class LstmCNN(nn.Module):
         hidden_concat = config.audio_dim + config.time_dim
 
         self.feedforward = FeedForward(in_dim=hidden_concat, mid_dim=hidden_concat*2, activation=SwiGLU(hidden_concat*2))
+        
         self.final_norm = nn.LayerNorm(hidden_concat)
 
         self.class_head = nn.Linear(hidden_concat, 1)
@@ -85,13 +85,10 @@ class LstmCNN(nn.Module):
         # we process B x seq_len all together
         B, seq_len, n_fft, n_frames = wav.shape
         wav = wav.reshape(B*seq_len, n_fft, n_frames)
-       
         cnn_res = self.cnn(wav)
-
         # B * seq_len x input_size -> B x seq_len x input_size
         cnn_res = cnn_res.reshape(B, seq_len, self.input_size)
 
-        
         output, (hn, cn) = self.lstm(cnn_res)
         f_audio = self.norm(output.mean(dim=1) + hn.permute(1,0,2)[:, -1])
         f_audio = self.audio_dropout(f_audio)
@@ -99,8 +96,5 @@ class LstmCNN(nn.Module):
         f_time = self.time_embed(emb_time) + self.time_scalar
 
         inputs_all = torch.cat([f_time, f_audio], dim=1)
-
         res = self.final_norm(self.feedforward(inputs_all))
-
         return self.class_head(res).squeeze(1)
-
