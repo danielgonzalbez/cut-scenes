@@ -73,14 +73,8 @@ class LstmCNN(nn.Module):
 
         hidden_concat = config.audio_dim + config.time_dim
 
-        self.feedforward = nn.Sequential(
-            nn.Linear(hidden_concat
-                      , hidden_concat*2),
-            nn.LayerNorm(hidden_concat*2),
-            SwiGLU(hidden_concat*2),
-            nn.Linear(hidden_concat*2, hidden_concat),
-            nn.LayerNorm(hidden_concat),
-        )
+        self.feedforward = FeedForward(in_dim=hidden_concat, mid_dim=hidden_concat*2, activation=SwiGLU(hidden_concat*2))
+        self.final_norm = nn.LayerNorm(hidden_concat)
 
         self.class_head = nn.Linear(hidden_concat, 1)
 
@@ -106,7 +100,7 @@ class LstmCNN(nn.Module):
 
         inputs_all = torch.cat([f_time, f_audio], dim=1)
 
-        res = self.feedforward(inputs_all)
+        res = self.final_norm(self.feedforward(inputs_all))
 
         return self.class_head(res).squeeze(1)
 
