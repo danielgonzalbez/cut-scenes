@@ -2,9 +2,9 @@ import torch
 import wandb
 import time
 from tqdm import tqdm
-import config.classifier as config
-from models.config.classifier import ModelConfig, CNNConfig
-from models.classifier import BasicCNN, BasicModel
+import config.regressor as config
+from models.config.regressor import ModelConfig, CNNConfig
+from models.regressor import BasicCNN, LstmCNN
 from data.datasets import AudioDataset
 from data.preprocess import generate_data
 import data.config as data_config
@@ -14,6 +14,7 @@ import scipy.stats as stats
 import torch.nn as nn
 from models.utils import initialize_weights
 from torch.utils.data import DataLoader
+import math
 
 
 if torch.cuda.is_available():
@@ -27,6 +28,8 @@ torch.set_default_dtype(config.dtype)
 
 # generate data with data.config parameters:
 train_data, eval_data, test_data, (mean_train, std_train) = generate_data()
+
+assert data_config.tmask < 100
 
 # define datasets
 train_dataset = AudioDataset(train_data, normalize=True, mean=mean_train, std=std_train, 
@@ -122,7 +125,7 @@ def eval(model, loss_fn, dataloader):
         total_acc += sum([pred[i].item() > 0 if target_class[i].item() == 1 else pred[i].item() < 0 for i in range(len(pred))])/num_samples * num_samples
         
         # exponential and poisson distributions
-        samples_pois = torch.tensor(stats.poisson.rvs(mu=64000/lambda_pois, size=num_samples))
+        samples_pois = torch.tensor(stats.poisson.rvs(mu=16000/lambda_pois, size=num_samples))
         predictions_pois=torch.where(samples_pois.clone().detach() > 0, torch.tensor(1), torch.tensor(-1))
         tp_poiss_i, tn_poiss_i, fp_poiss_i, fn_poiss_i = compute_labels(predictions_pois, target_class)
         tp_poiss += tp_poiss_i
@@ -149,7 +152,7 @@ def eval(model, loss_fn, dataloader):
 
 
 def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test_dataloader,
-            loss_fn = nn.BCEWithLogitsLoss(), start_epoch=0):
+            loss_fn = nn.BCEWithLogitsLoss(), start_epoch=0, path2save='checkpoint_{epoch}.pt'):
     model.train()
 
     for epoch in range(start_epoch, config.num_epochs):
@@ -196,7 +199,7 @@ def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test
             total_acc += sum([pred[i].item() > 0 if target_class[i].item() == 1 else pred[i].item() < 0 for i in range(len(pred))])/num_samples * num_samples
             
             # Poisson
-            samples_pois = torch.tensor(stats.poisson.rvs(mu=64000/lambda_pois, size=num_samples))
+            samples_pois = torch.tensor(stats.poisson.rvs(mu=16000/lambda_pois, size=num_samples))
             predictions_pois=torch.where(samples_pois.clone().detach() > 0, torch.tensor(1), torch.tensor(-1))
             tp_poiss_i, tn_poiss_i, fp_poiss_i, fn_poiss_i = compute_labels(predictions_pois, target_class)
             tp_poiss += tp_poiss_i
@@ -233,7 +236,7 @@ def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test
         train_acc = total_acc/total_samples
         precision = tp/(tp+fp)
         recall = tp/(tp+fn)
-        filename = f"2stream_checkpoint_{epoch}.pt"
+        filename = path2save.format(epoch=epoch)
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -266,23 +269,22 @@ cnn_config = CNNConfig()
 
 model_config = ModelConfig()
 
-assert(model_config.inner_dim == cnn_config.channels[-1])
-
-model_config.head_dim = model_config.inner_dim // model_config.num_heads * 2
-model_config.seq_len = cnn_config.last_dim
+assert(cnn_config.last_dim == model_config.audio_dim)
 
 base_cnn = BasicCNN(last_dim=cnn_config.last_dim,
                channels= list(cnn_config.channels),
                dims=list(cnn_config.dims),
-               dropout=cnn_config.dropout,
-               input_H=cnn_config.input_H,
-               input_W = cnn_config.input_W,
-               dims_model = cnn_config.dims_model
+               dropout=cnn_config.dropout
                )
 
-model = BasicModel(base_model=base_cnn, config=model_config)
+model = LstmCNN(base_model=base_cnn, config=model_config)
 
-initialize_weights(model)
+
+ones = len([d for d in train_data if d['tag'] <= 1])
+zeros = len(train_data) - ones
+bias_class_head = math.log(ones/zeros)
+
+initialize_weights(model, bias_class_head=bias_class_head)
 
 if config.log_wandb:
   # Initialize a W&B run

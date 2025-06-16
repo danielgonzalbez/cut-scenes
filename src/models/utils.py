@@ -13,7 +13,7 @@ def get_sinusoidal_pos_encoding(seq_len, dim):
     return pe  # shape: [seq_len, dim]
 
 
-def initialize_weights(model):
+def initialize_weights(model, bias_class_head=None):
     for name, module in model.named_modules():
         if isinstance(module, nn.Linear):
             init.xavier_uniform_(module.weight)
@@ -38,6 +38,9 @@ def initialize_weights(model):
                 nn.init.zeros_(module.bias)
 
         elif isinstance(module, nn.Embedding):
-            nn.init.normal_(module.weight, mean=0.0, std=0.02)  # like BERT
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)  
 
     nn.init.zeros_(model.time_scalar)
+
+    if bias_class_head:
+        model.class_head.bias.data.fill_(bias_class_head)

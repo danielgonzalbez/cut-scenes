@@ -19,17 +19,17 @@ class SwiGLU(nn.Module):
 
 
 class FeedForward(nn.Module):
-  def __init__(self, in_dim:int, mid_dim:int, activation: nn.Module):
+  def __init__(self, in_dim, mid_dim, activation):
     super().__init__()
-    self.norm = nn.RMSNorm(in_dim)
     self.linear1 = nn.Linear(in_dim, mid_dim)
     self.linear2 = nn.Linear(mid_dim, in_dim)
+    self.norm = nn.LayerNorm(mid_dim)
     self.act = activation
 
   def forward(self, x):
-    x = self.norm(x)
     x_map = self.linear1(x)
-    x_act = self.act(x_map)
+    x_norm = self.norm(x_map)
+    x_act = self.act(x_norm)
     return self.linear2(x_act)
   
 

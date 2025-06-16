@@ -3,7 +3,7 @@ import torch
 
 from modules import SwiGLU, MultiHeadAttention, FeedForward
 from utils import get_sinusoidal_pos_encoding
-from config.classifier import CNNConfig, ModelConfig
+from config.classifier import ModelConfig
 
 
 class ConvBlock(nn.Module):
@@ -96,10 +96,10 @@ class BasicModel(nn.Module):
                     nn.Linear(config.inner_dim*config.seq_len, config.inner_dim*2),
                     nn.LayerNorm(config.inner_dim*2),
                     SwiGLU(config.inner_dim*2),
-                    nn.Dropout(config.audio_dopout),
+                    nn.Dropout(config.audio_dropout),
                     nn.Linear(config.inner_dim*2,config.inner_dim),
                     nn.LayerNorm(config.inner_dim),
-                    nn.Dropout(config.audio_dopout)
+                    nn.Dropout(config.audio_dropout)
                 )
         
         self.flatten = nn.Flatten(start_dim=1)
