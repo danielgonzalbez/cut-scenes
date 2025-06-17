@@ -1,9 +1,9 @@
 import torch.nn as nn
 import torch 
 
-from modules import SwiGLU, MultiHeadAttention, FeedForward
-from utils import get_sinusoidal_pos_encoding
-from config.classifier import ModelConfig
+from .modules import SwiGLU, MultiHeadAttention, FeedForward
+from .utils import get_sinusoidal_pos_encoding
+from .config.classifier import ModelConfig
 
 
 class ConvBlock(nn.Module):
@@ -53,12 +53,13 @@ class BasicCNN(nn.Module):
                 )        
         self.final_norm = nn.LayerNorm(last_dim)
 
+
     def forward(self, x):
         # x: spectrogram. Shape: B x 128 x 400
         # returns tensor of shape: B x last_dim
         for block in self.conv_blocks:
             x = block(x)
-        x = self.final_conv(x).squeeze(1)
+        x = self.final_linear(x)
         x = self.final_norm(x)
         return x
 
@@ -80,39 +81,40 @@ class BasicModel(nn.Module):
             )
 
         self.attn_blocks = nn.ModuleList(
-           MultiHeadAttention(in_dim=1, num_heads=config.num_heads, head_dim=config.head_dim)
+           MultiHeadAttention(in_dim=config.audio_dim, num_heads=config.num_heads, head_dim=config.head_dim)
          for _ in range(config.depth_attn))
 
         self.ff_blocks = nn.ModuleList(
-           FeedForward(in_dim=config.inner_dim*2, mid_dim=config.inner_dim*4, activation=SwiGLU(config.inner_dim))
+           FeedForward(in_dim=config.audio_dim, mid_dim=config.audio_dim, activation=SwiGLU(config.audio_dim))
          for _ in range(config.depth_attn))
 
         self.norm_layers = nn.ModuleList(
-            nn.LayerNorm(config.inner_dim*2)
+            nn.LayerNorm(config.audio_dim)
          for _ in range(config.depth_attn-1))
 
 
         self.ff_audio = nn.Sequential(
-                    nn.Linear(config.inner_dim*config.seq_len, config.inner_dim*2),
-                    nn.LayerNorm(config.inner_dim*2),
-                    SwiGLU(config.inner_dim*2),
+                    nn.Linear(config.audio_dim*config.seq_len, config.audio_dim*2),
+                    nn.LayerNorm(config.audio_dim*2),
+                    SwiGLU(config.audio_dim*2),
                     nn.Dropout(config.audio_dropout),
-                    nn.Linear(config.inner_dim*2,config.inner_dim),
-                    nn.LayerNorm(config.inner_dim),
+                    nn.Linear(config.audio_dim*2,config.audio_dim),
+                    nn.LayerNorm(config.audio_dim),
                     nn.Dropout(config.audio_dropout)
                 )
         
         self.flatten = nn.Flatten(start_dim=1)
+
         self.time_scalar = nn.Parameter(torch.randn(1,  config.time_dim))
 
         self.previous_class_head = nn.Sequential(
-                                        nn.Linear(config.inner_dim + config.time_dim, config.inner_dim),
-                                        nn.LayerNorm(config.inner_dim),
+                                        nn.Linear(config.audio_dim + config.time_dim, config.audio_dim),
+                                        nn.LayerNorm(config.audio_dim),
                                         nn.SiLU())
         
-        self.class_head = nn.Linear(config.inner_dim,1)
+        self.class_head = nn.Linear(config.audio_dim,1)
 
-        self.final_dropout = config.final_dropout
+        self.final_dropout = nn.Dropout(config.final_dropout)
             
 
 
@@ -127,7 +129,7 @@ class BasicModel(nn.Module):
         f_audio = x + pos_encoding.to(x.device)  # [B, T, F]
 
         for i, (attn, ff) in enumerate(zip(self.attn_blocks, self.ff_blocks)):
-            attn_features = attn(f_audio.unsqueeze(2)).squeeze(2)
+            attn_features = attn(f_audio)
             new_features = ff(attn_features) + f_audio
             if i < len(self.attn_blocks) - 1: 
                 f_audio = self.norm_layers[i](new_features)

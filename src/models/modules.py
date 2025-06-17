@@ -1,7 +1,4 @@
 import torch.nn as nn
-import torch
-import math
-
 
 class SwiGLU(nn.Module):
     def __init__(self, inner_dim: int):

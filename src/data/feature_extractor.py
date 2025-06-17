@@ -1,13 +1,13 @@
 import torchaudio
 import torch
-import config
+from .config import window_time, hop_time, n_fft, n_mels, sample_rate
 
 # Log mel spec extractor:
 
 class FeatureExtractor():
-    def __init__(self, normalize_input=False, mean=-4.2677393,std=4.5689974, window_time=config.window_time,
-                 hop_time=config.hop_time, sample_rate=config.sample_rate, dtype=torch.float32, 
-                 n_mels=config.n_mels, n_fft=config.n_fft):
+    def __init__(self, normalize_input=False, mean=-4.2677393,std=4.5689974, window_time=window_time,
+                 hop_time=hop_time, sample_rate=sample_rate, dtype=torch.float32, 
+                 n_mels=n_mels, n_fft=n_fft):
         torch.set_default_dtype(dtype)
         hop_length = int(hop_time * sample_rate) # default: 160
         win_length = int(window_time * sample_rate) # default: 400

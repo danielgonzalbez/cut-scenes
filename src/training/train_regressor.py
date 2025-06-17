@@ -325,8 +325,8 @@ else:
 
 print(f"Number of parameters: {sum(p.numel() for p in model.parameters())}")
 print(f"Number of samples: {len(train_dataset)}, {len(eval_dataset)}, {len(test_dataset)}")
-train(model, optimizer=optimizer, scheduler=scheduler, config=config, dataloader=train_dataloader,
-      eval_dataloader=eval_dataloader, test_dataloader=test_dataloader, loss_fn=bce_loss, start_epoch=start_epoch)
+#train(model, optimizer=optimizer, scheduler=scheduler, config=config, dataloader=train_dataloader,
+ #     eval_dataloader=eval_dataloader, test_dataloader=test_dataloader, loss_fn=bce_loss, start_epoch=start_epoch)
 
 
 

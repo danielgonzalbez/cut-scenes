@@ -5,14 +5,14 @@ from torch.utils.data import Dataset, DataLoader
 import math
 from PIL import Image
 import numpy as np
+from .config import folder_images
 
 
 class AudioDataset(Dataset):
-    def __init__(self, data, feature_extractor, normalize=True, dtype=torch.float32,
+    def __init__(self, data, normalize=True, dtype=torch.float32,
                  mean=None, std=None, tmask=None, fmask=None, noise=False,
                  mean_empty=None, std_empty=None):
         self.data = data
-        self.feature_extractor=feature_extractor
         self.normalize = normalize
         self.dtype=dtype
         self.mean = mean
@@ -37,7 +37,7 @@ class AudioDataset(Dataset):
 
     def compute_embs_images(self, source, start_sample):
         frame = self.compute_frame(start_sample)
-        image = Image.open(f"/kaggle/input/concert-frames/{source}/frame_{frame}.jpg")
+        image = Image.open(folder_images.format(frame=frame, source=source))
         if self.noise:
           return self._train_transforms(image)
         else:

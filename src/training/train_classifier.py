@@ -28,19 +28,25 @@ torch.set_default_dtype(config.dtype)
 # generate data with data.config parameters:
 train_data, eval_data, test_data, (mean_train, std_train) = generate_data()
 
+emptys = [d['empty_samples'] for d in train_data]
+mean_empty = np.mean(emptys)
+std_empty = np.std(emptys)
+
 # define datasets
 train_dataset = AudioDataset(train_data, normalize=True, mean=mean_train, std=std_train, 
                              noise=data_config.noise, tmask=data_config.tmask, fmask=data_config.fmask, 
-                             dtype=torch.float32)
+                             dtype=torch.float32, mean_empty=mean_empty, std_empty=std_empty)
 eval_dataset = AudioDataset(eval_data, normalize=True, mean=mean_train, std=std_train, 
-                             noise=False, tmask=None, fmask=None, dtype=torch.float32)
+                             noise=False, tmask=None, fmask=None, dtype=torch.float32,
+                             mean_empty=mean_empty, std_empty=std_empty)
 test_dataset = AudioDataset(test_data, normalize=True, mean=mean_train, std=std_train, 
-                             noise=False, tmask=None, fmask=None, dtype=torch.float32)
+                             noise=False, tmask=None, fmask=None, dtype=torch.float32,
+                             mean_empty=mean_empty, std_empty=std_empty)
 
 # define dataloaders
 def get_sample_weights(dataset, data):
     # gets weights per label (batches will be sampled according to these weights)
-    ones = len([d for d in data if d['tag'] <= 1])
+    ones = len([d for d in data if d['label'] < 1])
     zeros = len(data) - ones
     class_weights={1: 1/ones,  0: 1/zeros}
     print("Generating weights for the training sampler...")
@@ -110,7 +116,7 @@ def eval(model, loss_fn, dataloader):
         num_samples = len(wav)
         total_samples += num_samples
         target_class = (tag < 1)*1.0
-        pred = model(wav.unsqueeze(1).to(device), time_tag.unsqueeze(1).to(device))
+        pred = model(wav.to(device), time_tag.unsqueeze(1).to(device))
         loss_i = loss_fn(pred, target_class.to(device)) * num_samples
         tp_i, tn_i, fp_i, fn_i = compute_labels(pred, target_class)
         tp += tp_i
@@ -145,7 +151,7 @@ def eval(model, loss_fn, dataloader):
     print_precision_recall('model', tp, fp, tn, fn)
     print_precision_recall('exp', tp_exp, fp_exp, tn_exp, fn_exp)
     print_precision_recall('pois', tp_poiss, fp_poiss, tn_poiss, fn_poiss)
-    return total_loss/total_samples, total_acc/total_samples, total_acc_poiss/total_samples, total_acc_exp/total_samples
+    return total_loss/total_samples
 
 
 def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test_dataloader,
@@ -167,7 +173,7 @@ def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test
             total_samples += num_samples
             target_class = (tag < 1)*1.0
 
-            pred = model(wav.unsqueeze(1).to(device), time_tag.unsqueeze(1).to(device))
+            pred = model(wav.to(device), time_tag.unsqueeze(1).to(device))
             tp_i, tn_i, fp_i, fn_i = compute_labels(pred, target_class)
             tp += tp_i
             tn += tn_i
@@ -233,7 +239,7 @@ def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test
         train_acc = total_acc/total_samples
         precision = tp/(tp+fp)
         recall = tp/(tp+fn)
-        filename = f"2stream_checkpoint_{epoch}.pt"
+        filename = f"{config.path_checkpoints}/classifier_unimodal_{epoch}.pt"
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
@@ -257,8 +263,8 @@ def train(model, optimizer, scheduler, config, dataloader, eval_dataloader, test
         print_precision_recall('exp', tp_exp, fp_exp, tn_exp, fn_exp)
         print_precision_recall('pois', tp_poiss, fp_poiss, tn_poiss, fn_poiss)
 
-        loss_eval, acc_eval = eval(model, loss_fn, eval_dataloader)
-        print(f"Total eval loss at epoch {epoch} = {loss_eval}. Accuracy: {acc_eval}")
+        loss_eval = eval(model, loss_fn, eval_dataloader)
+        print(f"Total eval loss at epoch {epoch} = {loss_eval}")
 
 
 # model and weights initialization
@@ -266,21 +272,19 @@ cnn_config = CNNConfig()
 
 model_config = ModelConfig()
 
-assert(model_config.inner_dim == cnn_config.channels[-1])
+assert(model_config.audio_dim == cnn_config.channels[-1])
 
-model_config.head_dim = model_config.inner_dim // model_config.num_heads * 2
+model_config.head_dim = model_config.audio_dim // model_config.num_heads * 2
 model_config.seq_len = cnn_config.last_dim
 
 base_cnn = BasicCNN(last_dim=cnn_config.last_dim,
                channels= list(cnn_config.channels),
                dims=list(cnn_config.dims),
                dropout=cnn_config.dropout,
-               input_H=cnn_config.input_H,
-               input_W = cnn_config.input_W,
-               dims_model = cnn_config.dims_model
                )
 
 model = BasicModel(base_model=base_cnn, config=model_config)
+model.to(device)
 
 initialize_weights(model)
 

@@ -18,15 +18,3 @@ load_checkpoint: bool = False
 checkpoint_file: str = None
 run_name: str = None
 project_name: str = None
-
-
-alpha_weight_loss:0.65
-grad_accum_steps:1
-log_wandb:true
-lr:0.0008
-num_epochs:40
-test_batch_size:128
-train_batch_size:128
-weight_decay:0.003
-weighted_loss:true
-weighted_sampling:false

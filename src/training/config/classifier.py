@@ -14,6 +14,7 @@ n_mels: int = 128
 log_wandb: bool=False
 grad_accum_steps: int = 1
 epochs_warmup: int = 1
+path_checkpoints: str = 'models/checkpoints'
 load_checkpoint: bool = False
 checkpoint_file: str = None
 run_name: str = None

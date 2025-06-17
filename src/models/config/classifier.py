@@ -10,10 +10,10 @@ class CNNConfig:
 
 @dataclass
 class ModelConfig:
-    inner_dim:int = 48
-    depth_attn:int = 3
+    audio_dim:int = 32
+    depth_attn:int = 2
     num_heads: int = 2
-    head_dim: int = 48
+    head_dim: int = 32
     time_dropout: float = 0.2
     audio_dropout: float = 0.4
     final_dropout: float = 0.4
