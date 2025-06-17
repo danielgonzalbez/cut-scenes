@@ -13,6 +13,6 @@ setup(
        "soundfile>=0.13.1"
     ],
     author='Daniel Gonzálbez Biosca',
-    description='A project for cut-scene detection using ML',
+    description='A project for cut-scene prediction using ML',
     python_requires='>=3.10',
 )
